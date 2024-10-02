@@ -1,32 +1,38 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 public class PlayerMovement : MonoBehaviour
 {
     [SerializeField] private int speed;
     [SerializeField] private int forceJump;
+    private float wallJumpCooldown;
+    private float horizontal;
 
-    private bool isGrounded;
+    [SerializeField] private LayerMask groundLayer;
+    [SerializeField] private LayerMask wallLayer;
 
     private Rigidbody2D rb;
     private Animator anim;
+    private BoxCollider2D boxCollider;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         anim = GetComponent<Animator>();
+        boxCollider = GetComponent<BoxCollider2D>();
     }
 
     private void Update()
     {
-        Movement();
-        Jump();
+        JumpWall();
     }
 
     private void Movement()
     {
-        float horizontal = Input.GetAxis("Horizontal");
+        horizontal = Input.GetAxis("Horizontal");
         rb.velocity = new Vector2(horizontal * speed, rb.velocity.y);
 
         //Flip
@@ -44,20 +50,68 @@ public class PlayerMovement : MonoBehaviour
 
     private void Jump()
     {
-        if (Input.GetKey(KeyCode.Space) && isGrounded == true)
+        if (isGrounded())
         {
             rb.velocity = new Vector2(rb.velocity.x, forceJump);
             anim.SetTrigger("jump");
-            anim.SetBool("isground", isGrounded);
-            isGrounded = false;
+            anim.SetBool("isground", isGrounded());
+        }
+        else if (OnWall() && !isGrounded())
+        {
+            if (horizontal == 0)
+            {
+                rb.velocity = new Vector2(-Mathf.Sign(transform.localScale.x) * 10, 0);
+                transform.localScale = new Vector3(-Mathf.Sign(transform.localScale.x), transform.localScale.y, transform.localScale.z);
+            }else
+            {
+                rb.velocity = new Vector2(-Mathf.Sign(transform.localScale.x) * 3, 10);
+            }
+
+            wallJumpCooldown = 0;
+        }
+    }
+
+    private void JumpWall()
+    {
+        if (wallJumpCooldown > 0.2f)
+        {
+
+            Movement();
+
+            if (OnWall() && !isGrounded())
+            {
+                rb.gravityScale = 0;
+                rb.velocity = Vector2.zero;
+            }
+            else
+            {
+                rb.gravityScale = 5;
+            }
+
+            if (Input.GetKey(KeyCode.Space))
+            {
+                Jump();
+            }
+        }
+        else
+        {
+            wallJumpCooldown += Time.deltaTime;
         }
     }
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        if (collision.gameObject.CompareTag("Ground"))
-        {
-            isGrounded = true;
-        }
+    }
+
+    private bool isGrounded()
+    {
+        RaycastHit2D raycastHit = Physics2D.BoxCast(boxCollider.bounds.center, boxCollider.bounds.size, 0, Vector2.down, 0.01f, groundLayer);
+        return raycastHit.collider != null;
+    }
+
+    private bool OnWall()
+    {
+        RaycastHit2D raycastHit = Physics2D.BoxCast(boxCollider.bounds.center, boxCollider.bounds.size, 0, new Vector2(transform.localScale.x, 0), 0.01f, wallLayer);
+        return raycastHit.collider != null;
     }
 }
